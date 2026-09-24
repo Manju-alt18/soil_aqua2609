@@ -1,124 +1,158 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import '../state/app_state.dart';
+import '../services/sensor_service.dart';
+import '/app_theme.dart';
 import '../widgets/moisture_gauge.dart';
 import '../widgets/stat_card.dart';
+import 'calendar_screen.dart';
+import 'history_screen.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
-    final scheme = Theme.of(context).colorScheme;
-    final width = MediaQuery.of(context).size.width;
-    final crossAxisCount = width > 700 ? 4 : (width > 420 ? 3 : 2);
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
-    return CustomScrollView(
-      slivers: [
-        if (!app.connected)
-          SliverToBoxAdapter(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              color: Colors.redAccent.withValues(alpha: 0.15),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
-                  const SizedBox(width: 10),
-                  const Expanded(
-                    child: Text(
-                      'Sensor circuit disconnected! Check wiring / power.',
-                      style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+class _HomeScreenState extends State<HomeScreen> {
+  final sensor = SensorService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    sensor.addListener(_refresh);
+  }
+
+  @override
+  void dispose() {
+    sensor.removeListener(_refresh);
+    super.dispose();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(gradient: AppColors.homeGradient),
+        child: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+            children: [
+              const Text('Hello, Grower 🌱',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.ink)),
+              const SizedBox(height: 4),
+              const Text("Here is today's field status", style: TextStyle(color: Colors.black54)),
+              const SizedBox(height: 16),
+
+              // ----- Sensor connected / disconnected signal -----
+              _signalBanner(),
+
+              const SizedBox(height: 18),
+              Center(child: MoistureGauge(value: sensor.moistureLevel, size: 200)),
+              const SizedBox(height: 22),
+
+              // ----- Circuit ON/OFF -----
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(22),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 10, offset: const Offset(0, 4))],
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.power_settings_new, color: sensor.circuitOn ? AppColors.forest : Colors.grey, size: 26),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        sensor.circuitOn ? 'Irrigation Circuit: ON' : 'Irrigation Circuit: OFF',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
                     ),
+                    Switch(
+                      value: sensor.circuitOn,
+                      activeColor: AppColors.forest,
+                      onChanged: (v) => sensor.toggleCircuit(v),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 22),
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                crossAxisSpacing: 14,
+                mainAxisSpacing: 14,
+                childAspectRatio: 1.3,
+                children: [
+                  StatCard(
+                    label: 'Irrigations Today',
+                    value: '${sensor.todayIrrigationCount}',
+                    icon: Icons.water_drop_outlined,
+                    gradient: AppColors.cardGradientGreen,
+                  ),
+                  StatCard(
+                    label: 'Litres Used Today',
+                    value: '${sensor.todayLitresUsed.toStringAsFixed(1)} L',
+                    icon: Icons.opacity,
+                    gradient: AppColors.cardGradientBlue,
+                  ),
+                  // ----- Navigate to Calendar -----
+                  StatCard(
+                    label: 'View Calendar',
+                    value: 'Calendar',
+                    icon: Icons.calendar_month_rounded,
+                    gradient: const LinearGradient(colors: [Color(0xFFB388FF), Color(0xFF8EC5FC)]),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const CalendarScreen())),
+                  ),
+                  // ----- Navigate to History -----
+                  StatCard(
+                    label: 'View History',
+                    value: 'History',
+                    icon: Icons.history_rounded,
+                    gradient: const LinearGradient(colors: [Color(0xFFFFC371), Color(0xFF3DDC97)]),
+                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const HistoryScreen())),
                   ),
                 ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _signalBanner() {
+    final connected = sensor.circuitConnected;
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: connected ? AppColors.leaf.withOpacity(0.15) : AppColors.coral.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: connected ? AppColors.leaf : AppColors.coral, width: 1.2),
+      ),
+      child: Row(
+        children: [
+          Icon(connected ? Icons.wifi : Icons.wifi_off, color: connected ? AppColors.forest : AppColors.coral),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              connected ? 'Sensor Connected' : 'Sensor Disconnected! Check wiring.',
+              style: TextStyle(
+                color: connected ? AppColors.forest : AppColors.coral,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
-        SliverPadding(
-          padding: const EdgeInsets.all(20),
-          sliver: SliverList(
-            delegate: SliverChildListDelegate([
-              Center(child: MoistureGauge(percent: app.moisturePercent)),
-              const SizedBox(height: 24),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Icon(
-                        app.circuitOn ? Icons.power : Icons.power_off,
-                        color: app.circuitOn ? scheme.primary : scheme.outline,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Irrigation Circuit',
-                                style: TextStyle(fontWeight: FontWeight.w600)),
-                            Text(
-                              app.circuitOn
-                                  ? (app.connected ? 'Online' : 'Disconnected')
-                                  : 'Powered Off',
-                              style: TextStyle(
-                                color: !app.connected
-                                    ? Colors.redAccent
-                                    : (app.circuitOn ? Colors.greenAccent.shade400 : scheme.outline),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: app.circuitOn,
-                        onChanged: (v) => context.read<AppState>().toggleCircuit(v),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              GridView.count(
-                crossAxisCount: crossAxisCount,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                mainAxisSpacing: 14,
-                crossAxisSpacing: 14,
-                childAspectRatio: 1.25,
-                children: [
-                  StatCard(
-                    icon: Icons.water_drop_outlined,
-                    label: 'Irrigations Today',
-                    value: '${app.irrigationsToday()}',
-                    accent: scheme.primary,
-                  ),
-                  StatCard(
-                    icon: Icons.opacity_rounded,
-                    label: 'Litres Used Today',
-                    value: app.litresToday().toStringAsFixed(1),
-                    accent: Colors.blueAccent,
-                  ),
-                  StatCard(
-                    icon: Icons.water,
-                    label: 'Total Litres Used',
-                    value: app.litresTotal().toStringAsFixed(1),
-                    accent: Colors.cyan,
-                  ),
-                  StatCard(
-                    icon: app.connected ? Icons.wifi : Icons.wifi_off,
-                    label: 'Sensor Status',
-                    value: app.connected ? 'Connected' : 'Offline',
-                    accent: app.connected ? Colors.greenAccent.shade400 : Colors.redAccent,
-                  ),
-                ],
-              ),
-            ]),
-          ),
-        ),
-      ],
+          if (!connected)
+            TextButton(onPressed: () => sensor.reconnectCircuit(), child: const Text('Retry')),
+        ],
+      ),
     );
   }
 }

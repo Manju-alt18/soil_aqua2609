@@ -1,86 +1,113 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:provider/provider.dart';
-import '../models/irrigation_event.dart';
-import '../state/app_state.dart';
+import '../services/sensor_service.dart';
+import '/app_theme.dart';
 
-class HistoryScreen extends StatelessWidget {
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
   @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+enum _Filter { all, alertsOnly }
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  final sensor = SensorService.instance;
+  _Filter _filter = _Filter.all;
+
+  @override
   Widget build(BuildContext context) {
-    final app = context.watch<AppState>();
-    final scheme = Theme.of(context).colorScheme;
-    final records = app.records;
+    final records = sensor.history.reversed
+        .where((r) => _filter == _Filter.all || r.hadDisconnectAlert)
+        .toList();
 
-    // Group by day, preserving descending order.
-    final Map<String, List<IrrigationEvent>> grouped = {};
-    for (final e in records) {
-      final key = DateFormat('EEEE, d MMM yyyy').format(e.day);
-      grouped.putIfAbsent(key, () => []).add(e);
-    }
-
-    if (records.isEmpty) {
-      return Center(
-        child: Text('No irrigation history yet',
-            style: TextStyle(color: scheme.onSurfaceVariant)),
-      );
-    }
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Card(
-          color: scheme.primaryContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _summaryStat(context, '${records.length}', 'Total Events'),
-                Container(width: 1, height: 36, color: scheme.onPrimaryContainer.withValues(alpha: 0.2)),
-                _summaryStat(context, app.litresTotal().toStringAsFixed(1), 'Total Litres'),
-              ],
-            ),
+    return Scaffold(
+      appBar: AppBar(title: const Text('History')),
+      body: Container(
+        decoration: const BoxDecoration(gradient: AppColors.historyGradient),
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    _chip('All', _Filter.all),
+                    const SizedBox(width: 8),
+                    _chip('Alerts', _Filter.alertsOnly),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: records.isEmpty
+                    ? const Center(child: Text('No records yet.', style: TextStyle(color: Colors.black54)))
+                    : ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
+                        itemCount: records.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 12),
+                        itemBuilder: (context, i) => _historyTile(records[i]),
+                      ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 16),
-        for (final entry in grouped.entries) ...[
-          Padding(
-            padding: const EdgeInsets.only(left: 4, top: 10, bottom: 6),
-            child: Text(entry.key,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-          ),
-          for (final e in entry.value)
-            Card(
-              margin: const EdgeInsets.symmetric(vertical: 4),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: scheme.secondaryContainer,
-                  child: Icon(Icons.opacity_rounded, color: scheme.onSecondaryContainer),
-                ),
-                title: Text('${e.litres.toStringAsFixed(1)} L'),
-                subtitle: Text('Moisture at time: ${e.moistureAtTime}%'),
-                trailing: Text(DateFormat('hh:mm a').format(e.dateTime)),
-              ),
-            ),
-        ],
-      ],
+      ),
     );
   }
 
-  Widget _summaryStat(BuildContext context, String value, String label) {
-    final scheme = Theme.of(context).colorScheme;
-    return Column(
-      children: [
-        Text(value,
-            style: Theme.of(context)
-                .textTheme
-                .headlineSmall
-                ?.copyWith(fontWeight: FontWeight.bold, color: scheme.onPrimaryContainer)),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(color: scheme.onPrimaryContainer, fontSize: 12)),
-      ],
+  Widget _chip(String label, _Filter value) {
+    final selected = _filter == value;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => setState(() => _filter = value),
+      selectedColor: AppColors.forest,
+      labelStyle: TextStyle(color: selected ? Colors.white : AppColors.ink, fontWeight: FontWeight.w600),
+      backgroundColor: Colors.white,
+    );
+  }
+
+  Widget _historyTile(DailyRecord r) {
+    final alert = r.hadDisconnectAlert;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border(left: BorderSide(color: alert ? AppColors.coral : AppColors.leaf, width: 5)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 3))],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: alert
+                  ? const LinearGradient(colors: [Color(0xFFFF8A65), Color(0xFFE64A4A)])
+                  : AppColors.cardGradientBlue,
+            ),
+            child: Icon(alert ? Icons.warning_amber_rounded : Icons.calendar_today, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(DateFormat('EEE, d MMM yyyy').format(r.date), style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                Text(
+                  '${r.irrigationCount} irrigations · ${r.litresUsed.toStringAsFixed(1)} L · ${r.avgMoisture.toStringAsFixed(0)}% moisture',
+                  style: const TextStyle(color: Colors.black54, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
