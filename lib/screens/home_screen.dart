@@ -83,12 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 22),
               GridView.count(
-                crossAxisCount: 2,
+                crossAxisCount: 4,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 14,
-                mainAxisSpacing: 14,
-                childAspectRatio: 1.3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 1.8,
                 children: [
                   StatCard(
                     label: 'Irrigations Today',
